@@ -1,3 +1,42 @@
+# Nikita Game
+
+2D пиксель-арт платформер на libGDX с мрачной атмосферой, вдохновлённый Hollow Knight и Ori. Главная героиня — принцесса Никита, восстающая против отца-короля, приносящего детей в жертву ради бессмертия.
+
+## Скриншот
+![start_menu](core/assets/start_menu_bg.png)
+
+## Особенности
+- Кинематографичное интро с диалогами и анимацией
+- Мрачная атмосфера, глубокий сюжет
+- Пиксель-арт графика, эффекты, музыка
+- Продуманное стартовое меню (новая игра, продолжить, выйти)
+- Поддержка кириллицы, плавные переходы, звуки диалогов
+- Система сохранения прогресса
+
+## Управление
+- **Стрелки / WASD** — движение
+- **Пробел / E** — действие, продолжить диалог
+- **Мышь** — навигация по меню
+
+## Сборка и запуск
+1. Установите JDK 17+
+2. Клонируйте репозиторий:
+   ```
+   git clone git@github.com:SCMARS/nikita_game.git
+   ```
+3. Перейдите в папку проекта и запустите:
+   ```
+   ./gradlew :lwjgl3:run
+   ```
+
+## Атмосфера
+- Мрачные замки, жертвоприношения, вечная тьма
+- Музыка и эффекты для полного погружения
+- Вдохновение: Hollow Knight, Ori, Dark Souls
+
+## Лицензия
+MIT. Используйте и дорабатывайте свободно.
+
 # NikitaEscape
 
 A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
@@ -31,4 +70,3 @@ Useful Gradle tasks and flags:
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
 For example, `core:clean` removes `build` folder only from the `core` project.
-# nikita_game
