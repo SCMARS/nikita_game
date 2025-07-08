@@ -51,6 +51,13 @@ public class GameScreen implements Screen {
         pixmap.dispose();
         try {
             System.out.println("=== ОТЛАДКА ЗАГРУЗКИ КАРТЫ ===");
+            System.out.println("🍎 macOS Debug Info:");
+            System.out.println("   OS: " + System.getProperty("os.name"));
+            System.out.println("   Java: " + System.getProperty("java.version"));
+            System.out.println("   OpenGL Vendor: " + Gdx.gl.glGetString(Gdx.gl.GL_VENDOR));
+            System.out.println("   OpenGL Renderer: " + Gdx.gl.glGetString(Gdx.gl.GL_RENDERER));
+            System.out.println("   OpenGL Version: " + Gdx.gl.glGetString(Gdx.gl.GL_VERSION));
+
             System.out.println("Загружаем карту: " + levelName);
 
             // Проверяем существование файла

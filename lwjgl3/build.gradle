@@ -51,7 +51,19 @@ run {
 // You can uncomment the next line if your IDE claims a build failure even when the app closed properly.
   //setIgnoreExitValue(true)
 
-  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+  // Enhanced macOS support with multiple JVM arguments
+  if (os.contains('mac')) {
+    jvmArgs += [
+      "-XstartOnFirstThread",  // Required for macOS OpenGL
+      "-Djava.awt.headless=false",  // Enable AWT for graphics
+      "-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=true",  // Allow software OpenGL fallback
+      "-Dcom.apple.mrj.application.apple.menu.about.name=NikitaEscape",  // App name in menu
+      "-Dfile.encoding=UTF-8",  // Ensure UTF-8 encoding
+      "-Djava.library.path=" + System.getProperty("java.library.path"),  // Native library path
+      "-Dorg.lwjgl.util.Debug=true",  // Enable LWJGL debug output
+      "-Dorg.lwjgl.util.DebugLoader=true"  // Debug native library loading
+    ]
+  }
 }
 
 jar {

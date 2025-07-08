@@ -6,6 +6,15 @@ import com.badlogic.gdx.Game;
 public class NikitaGame extends Game {
     @Override
     public void create() {
-        setScreen(new FirstScreen(this));
+        // Check for test mode via system property
+        String testMode = System.getProperty("nikita.test.mode");
+
+        if ("simple".equals(testMode)) {
+            System.out.println("🧪 Starting in simple test mode");
+            setScreen(new SimpleTestScreen());
+        } else {
+            System.out.println("🎮 Starting normal game");
+            setScreen(new FirstScreen(this));
+        }
     }
 }
