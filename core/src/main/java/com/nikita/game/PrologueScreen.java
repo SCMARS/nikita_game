@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.Input;
 
 public class PrologueScreen implements Screen {
     private NikitaGame game;
@@ -61,7 +62,7 @@ public class PrologueScreen implements Screen {
             batch.setColor(1, 1, 1, 1);
             if (fade >= 1f) {
                 music.stop();
-                game.setScreen(new GameScreen());
+                game.setScreen(new GameScreen("Level1.tmx"));
             }
         }
         batch.end();
@@ -71,6 +72,11 @@ public class PrologueScreen implements Screen {
             else dialogue.startDialogue(new String[]{
                 "..."
             });
+        }
+        // Возможность пропустить кат-сцену на цифру 9
+        if (!fading && Gdx.input.isKeyJustPressed(Input.Keys.NUM_9)) {
+            fading = true;
+            fade = 0f;
         }
     }
 

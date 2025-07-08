@@ -88,4 +88,14 @@ public class Player {
     public int getKeys() { return keys; }
 
     public int getSeals() { return seals; }
+
+    public void setHealth(int value) {
+        this.health = Math.max(0, Math.min(value, maxHealth));
+    }
+    public void setKeys(int value) {
+        this.keys = Math.max(0, value);
+    }
+    public void setSeals(int value) {
+        this.seals = Math.max(0, value);
+    }
 } 

@@ -27,6 +27,9 @@ public class KingIntroScreen implements Screen {
     private float introAnim = 0f; // 0..1
     private boolean introDone = false;
     private Sound blip;
+    private long blipId = -1;
+    private int visibleChars = 0;
+    private float charTimer = 0f;
     private GlyphLayout layout = new GlyphLayout();
     private int lastDialogueIndex = -1;
     private String[] dialogues = {
@@ -59,7 +62,7 @@ public class KingIntroScreen implements Screen {
         nameFont = generator.generateFont(parameter);
         generator.dispose();
         // Звук для субтитров
-        try { blip = Gdx.audio.newSound(Gdx.files.internal("sfx/blip.wav")); } catch (Exception e) { blip = null; }
+        try { blip = Gdx.audio.newSound(Gdx.files.internal("music/bit_text_blip_high_pitch_style.wav")); } catch (Exception e) { blip = null; }
     }
 
     @Override
@@ -95,8 +98,11 @@ public class KingIntroScreen implements Screen {
         // Диалоги (центрируем по ширине картинки, перенос строк)
         if (dialogueIndex < dialogues.length) {
             String text = dialogues[dialogueIndex];
-            if (dialogueIndex != lastDialogueIndex && blip != null) blip.play(0.5f);
-            if (dialogueIndex != lastDialogueIndex) phraseAlpha = 0f;
+            if (dialogueIndex != lastDialogueIndex) {
+                phraseAlpha = 0f;
+                visibleChars = 0;
+                charTimer = 0f;
+            }
             lastDialogueIndex = dialogueIndex;
             if (!text.isEmpty()) {
                 String name = "";
@@ -120,18 +126,28 @@ public class KingIntroScreen implements Screen {
                     nameFont.setColor(Color.GOLD);
                     nameFont.draw(batch, name, dialogX - layout.width/2f, dialogY + 40);
                 }
-                // Плавное появление текста
+                // Плавное появление текста по буквам
+                float charsPerSec = 40f;
+                charTimer += delta * charsPerSec;
+                int targetChars = Math.min(phrase.length(), (int)charTimer);
+                if (targetChars > visibleChars && blip != null && phraseAlpha > 0.1f && phrase.charAt(visibleChars) != ' ') {
+                    blip.play(0.18f);
+                }
+                visibleChars = targetChars;
+                String visiblePhrase = phrase.substring(0, visibleChars);
                 phraseAlpha += delta * 2.5f;
                 if (phraseAlpha > 1f) phraseAlpha = 1f;
                 font.setColor((text.startsWith("Никита") ? Color.LIGHT_GRAY : Color.WHITE).cpy().lerp(Color.CLEAR, 1f-phraseAlpha));
-                layout.setText(font, phrase, Color.WHITE, dialogAreaW, 1, true);
+                layout.setText(font, visiblePhrase, Color.WHITE, dialogAreaW, 1, true);
                 font.draw(batch, layout, dialogX - dialogAreaW/2f, dialogY);
             }
             dialogueTimer += delta;
-            if ((introDone && dialogueTimer > 5f) || (introDone && (Gdx.input.isKeyJustPressed(Input.Keys.E) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)))) {
+            if ((introDone && dialogueTimer > 5f && visibleChars == (dialogueIndex < dialogues.length ? dialogues[dialogueIndex].replaceAll(".*:","").trim().length() : 0)) || (introDone && (Gdx.input.isKeyJustPressed(Input.Keys.E) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)))) {
                 dialogueIndex++;
                 dialogueTimer = 0f;
                 phraseAlpha = 0f;
+                visibleChars = 0;
+                charTimer = 0f;
             }
         } else {
             fading = true;

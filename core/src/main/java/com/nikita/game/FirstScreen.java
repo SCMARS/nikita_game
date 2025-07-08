@@ -91,7 +91,7 @@ public class FirstScreen implements Screen {
         String title = "NIKITA: Восстание Принцессы";
         layout.setText(titleFont, title);
         float titleX = (winW - layout.width) / 2f;
-        float titleY = winH/2f + 120;
+        float titleY = winH/2f + 200;
         titleFontShadow.draw(batch, title, titleX+3, titleY-3);
         titleFont.draw(batch, title, titleX, titleY);
         batch.end();
