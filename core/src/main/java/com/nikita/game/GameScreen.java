@@ -30,14 +30,14 @@ public class GameScreen implements Screen {
     private com.badlogic.gdx.graphics.Texture testTexture;
 
     public GameScreen() {
-        this("maps/level_true.tmx"); // Используем исправленную карту
+        this("Level1.tmx"); // Используем рабочую карту Level1
     }
 
     public GameScreen(String levelName) {
         this.levelName = levelName;
         Box2D.init();
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 640, 480); // Настройки в пикселях для лучшего отображения
+        camera.setToOrtho(false, 20, 15); // Настройки для карты Level1
         batch = new SpriteBatch();
 
         // Инициализируем ShapeRenderer и тестовую текстуру
@@ -166,8 +166,8 @@ public class GameScreen implements Screen {
         world.step(delta, 6, 2);
         player.update(delta);
         for (Enemy e : enemies) e.update(delta, player.getPosition());
-        // Зафиксируем камеру в центре карты для тестирования
-        camera.position.set(320, 240, 0); // Центр экрана 640x480
+        // Зафиксируем камеру в центре карты Level1
+        camera.position.set(10, 7.5f, 0); // Центр карты Level1
         camera.update();
 
         if (!debugPrinted) {
@@ -180,7 +180,7 @@ public class GameScreen implements Screen {
             debugPrinted = true;
         }
 
-        Gdx.gl.glClearColor(0.1f, 0.05f, 0.1f, 1); // Обычный фон
+        Gdx.gl.glClearColor(0.0f, 0.0f, 1.0f, 1); // СИНИЙ фон для теста
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         // Рендерим карту
