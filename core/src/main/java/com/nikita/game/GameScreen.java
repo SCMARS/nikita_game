@@ -37,7 +37,7 @@ public class GameScreen implements Screen {
         this.levelName = levelName;
         Box2D.init();
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 20, 15); // Настройки для карты 20x15
+        camera.setToOrtho(false, 640, 480); // Настройки в пикселях для лучшего отображения
         batch = new SpriteBatch();
 
         // Инициализируем ShapeRenderer и тестовую текстуру
@@ -79,7 +79,7 @@ public class GameScreen implements Screen {
                 System.out.println("Слой " + i + ": " + map.getLayers().get(i).getName() + " (тип: " + map.getLayers().get(i).getClass().getSimpleName() + ")");
             }
 
-            mapRenderer = new OrthogonalTiledMapRenderer(map, 1f/32f); // Масштаб для тайлов 32x32
+            mapRenderer = new OrthogonalTiledMapRenderer(map, 1f); // Масштаб 1:1 для лучшего отображения
             System.out.println("✓ Рендерер карты создан");
 
         } catch (Exception e) {
@@ -166,7 +166,8 @@ public class GameScreen implements Screen {
         world.step(delta, 6, 2);
         player.update(delta);
         for (Enemy e : enemies) e.update(delta, player.getPosition());
-        camera.position.set(player.getPosition().x, player.getPosition().y, 0);
+        // Зафиксируем камеру в центре карты для тестирования
+        camera.position.set(320, 240, 0); // Центр экрана 640x480
         camera.update();
 
         if (!debugPrinted) {
@@ -190,8 +191,9 @@ public class GameScreen implements Screen {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        player.render(batch);
-        for (Enemy e : enemies) e.render(batch);
+        // Временно отключаем игрока для тестирования карты
+        // player.render(batch);
+        // for (Enemy e : enemies) e.render(batch);
         batch.end();
     }
 

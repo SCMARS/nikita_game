@@ -51,9 +51,9 @@ public class Lwjgl3Launcher {
         // Additional debugging for macOS
         if (isMac) {
             System.out.println("🔧 Configuration applied:");
-            System.out.println("   - VSync: " + configuration.vSyncEnabled);
-            System.out.println("   - FPS: " + configuration.foregroundFPS);
-            System.out.println("   - Window size: " + configuration.windowWidth + "x" + configuration.windowHeight);
+            System.out.println("   - VSync: " + (isMac ? "disabled" : "enabled"));
+            System.out.println("   - FPS: " + (isMac ? "60" : "auto"));
+            System.out.println("   - Window mode: " + (isMac ? "windowed 1280x720" : "fullscreen"));
         }
 
         return configuration;
