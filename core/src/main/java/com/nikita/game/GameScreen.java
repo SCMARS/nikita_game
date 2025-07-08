@@ -26,19 +26,60 @@ public class GameScreen implements Screen {
     private Player player;
     private Array<Enemy> enemies;
     private String levelName;
+    private com.badlogic.gdx.graphics.glutils.ShapeRenderer shapeRenderer;
+    private com.badlogic.gdx.graphics.Texture testTexture;
 
     public GameScreen() {
-        this("Level1.tmx");
+        this("maps/level_true.tmx"); // Используем исправленную карту
     }
 
     public GameScreen(String levelName) {
         this.levelName = levelName;
         Box2D.init();
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 20, 11.25f); // 1280x720 / 64 (масштаб)
+        camera.setToOrtho(false, 20, 15); // Настройки для карты 20x15
         batch = new SpriteBatch();
-        map = new TmxMapLoader().load(levelName);
-        mapRenderer = new OrthogonalTiledMapRenderer(map, 1f);
+
+        // Инициализируем ShapeRenderer и тестовую текстуру
+        shapeRenderer = new com.badlogic.gdx.graphics.glutils.ShapeRenderer();
+
+        // Создаем простую белую текстуру для тестирования
+        com.badlogic.gdx.graphics.Pixmap pixmap = new com.badlogic.gdx.graphics.Pixmap(100, 100, com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888);
+        pixmap.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+        pixmap.fill();
+        testTexture = new com.badlogic.gdx.graphics.Texture(pixmap);
+        pixmap.dispose();
+        try {
+            System.out.println("=== ОТЛАДКА ЗАГРУЗКИ КАРТЫ ===");
+            System.out.println("Загружаем карту: " + levelName);
+
+            // Проверяем существование файла
+            if (!Gdx.files.internal(levelName).exists()) {
+                System.err.println("ОШИБКА: Файл карты не найден: " + levelName);
+                throw new RuntimeException("Файл карты не найден: " + levelName);
+            }
+            System.out.println("✓ Файл карты найден");
+
+            map = new TmxMapLoader().load(levelName);
+            System.out.println("✓ Карта загружена успешно");
+
+            // Информация о карте
+            System.out.println("Размер карты: " + map.getProperties().get("width") + "x" + map.getProperties().get("height"));
+            System.out.println("Размер тайла: " + map.getProperties().get("tilewidth") + "x" + map.getProperties().get("tileheight"));
+            System.out.println("Количество слоев: " + map.getLayers().getCount());
+
+            for (int i = 0; i < map.getLayers().getCount(); i++) {
+                System.out.println("Слой " + i + ": " + map.getLayers().get(i).getName() + " (тип: " + map.getLayers().get(i).getClass().getSimpleName() + ")");
+            }
+
+            mapRenderer = new OrthogonalTiledMapRenderer(map, 1f/32f); // Масштаб для тайлов 32x32
+            System.out.println("✓ Рендерер карты создан");
+
+        } catch (Exception e) {
+            System.err.println("ОШИБКА при загрузке карты: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
         world = new World(new Vector2(0, -12f), true);
         player = new Player(world, 2, 2);
         enemies = new Array<>();
@@ -50,12 +91,16 @@ public class GameScreen implements Screen {
     }
 
     private void createCollisionBodiesFromMap() {
-        
+
         int tileWidth = map.getProperties().get("tilewidth", Integer.class);
         int tileHeight = map.getProperties().get("tileheight", Integer.class);
         int width = map.getProperties().get("width", Integer.class);
         int height = map.getProperties().get("height", Integer.class);
         com.badlogic.gdx.maps.tiled.TiledMapTileLayer walls = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Walls");
+        if (walls == null) {
+            // Если слоя Walls нет, попробуем использовать первый слой
+            walls = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get(0);
+        }
         if (walls == null) return;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
@@ -107,6 +152,8 @@ public class GameScreen implements Screen {
     @Override
     public void show() {}
 
+    private boolean debugPrinted = false;
+
     @Override
     public void render(float delta) {
         world.step(delta, 6, 2);
@@ -114,10 +161,26 @@ public class GameScreen implements Screen {
         for (Enemy e : enemies) e.update(delta, player.getPosition());
         camera.position.set(player.getPosition().x, player.getPosition().y, 0);
         camera.update();
-        Gdx.gl.glClearColor(0.1f, 0.05f, 0.1f, 1);
+
+        if (!debugPrinted) {
+            System.out.println("=== ОТЛАДКА РЕНДЕРИНГА ===");
+            System.out.println("Позиция камеры: " + camera.position);
+            System.out.println("Размер viewport камеры: " + camera.viewportWidth + "x" + camera.viewportHeight);
+            System.out.println("Позиция игрока: " + player.getPosition());
+            System.out.println("Карта не null: " + (map != null));
+            System.out.println("Рендерер не null: " + (mapRenderer != null));
+            debugPrinted = true;
+        }
+
+        Gdx.gl.glClearColor(0.1f, 0.05f, 0.1f, 1); // Обычный фон
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        mapRenderer.setView(camera);
-        mapRenderer.render();
+
+        // Рендерим карту
+        if (mapRenderer != null && map != null) {
+            mapRenderer.setView(camera);
+            mapRenderer.render();
+        }
+
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         player.render(batch);
@@ -140,9 +203,11 @@ public class GameScreen implements Screen {
     public void hide() {}
     @Override
     public void dispose() {
-        map.dispose();
-        mapRenderer.dispose();
-        batch.dispose();
-        world.dispose();
+        if (map != null) map.dispose();
+        if (mapRenderer != null) mapRenderer.dispose();
+        if (batch != null) batch.dispose();
+        if (world != null) world.dispose();
+        if (shapeRenderer != null) shapeRenderer.dispose();
+        if (testTexture != null) testTexture.dispose();
     }
-} 
+}
