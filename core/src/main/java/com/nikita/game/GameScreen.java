@@ -2,7 +2,13 @@ package com.nikita.game;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.maps.tiled.TiledMap;
@@ -18,6 +24,7 @@ import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
 
 public class GameScreen implements Screen {
+    private NikitaGame game;
     private OrthographicCamera camera;
     private SpriteBatch batch;
     private TiledMap map;
@@ -29,19 +36,44 @@ public class GameScreen implements Screen {
     private com.badlogic.gdx.graphics.glutils.ShapeRenderer shapeRenderer;
     private com.badlogic.gdx.graphics.Texture testTexture;
 
+    // Поля для диалога выхода
+    private boolean showExitConfirm = false;
+    private int exitSelected = 0; // 0 - Да, 1 - Нет
+    private BitmapFont exitFont, exitTitleFont;
+    private GlyphLayout exitLayout = new GlyphLayout();
+    private ShapeRenderer exitShapeRenderer;
+
     public GameScreen() {
-        this("Level1.tmx"); // Используем рабочую карту Level1
+        this(null, "maps/test_small.tmx"); // Временно используем рабочую карту для отладки
     }
 
     public GameScreen(String levelName) {
+        this(null, levelName);
+    }
+
+    public GameScreen(NikitaGame game, String levelName) {
+        this.game = game;
         this.levelName = levelName;
         Box2D.init();
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 20, 15); // Настройки для карты Level1
+        // Настройка камеры для карты 20x15 тайлов с отступами
+        camera.setToOrtho(false, 22, 17); // Немного больше карты для отступов
         batch = new SpriteBatch();
 
         // Инициализируем ShapeRenderer и тестовую текстуру
         shapeRenderer = new com.badlogic.gdx.graphics.glutils.ShapeRenderer();
+        exitShapeRenderer = new ShapeRenderer();
+
+        // Инициализируем шрифты для диалога выхода
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("Roboto-Regular.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        parameter.size = 32;
+        parameter.characters = FreeTypeFontGenerator.DEFAULT_CHARS + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+        exitFont = generator.generateFont(parameter);
+        parameter.size = 40;
+        parameter.color = Color.WHITE;
+        exitTitleFont = generator.generateFont(parameter);
+        generator.dispose();
 
         // Создаем простую белую текстуру для тестирования
         com.badlogic.gdx.graphics.Pixmap pixmap = new com.badlogic.gdx.graphics.Pixmap(100, 100, com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888);
@@ -79,7 +111,23 @@ public class GameScreen implements Screen {
                 System.out.println("Слой " + i + ": " + map.getLayers().get(i).getName() + " (тип: " + map.getLayers().get(i).getClass().getSimpleName() + ")");
             }
 
-            mapRenderer = new OrthogonalTiledMapRenderer(map, 1f); // Масштаб 1:1 для лучшего отображения
+            // Анализируем тайлы в центре карты для отладки (только первые 5 тайлов)
+            com.badlogic.gdx.maps.tiled.TiledMapTileLayer groundLayer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get(0);
+            if (groundLayer != null) {
+                System.out.println("🔍 Анализ тайлов в центре карты:");
+                int count = 0;
+                for (int x = 45; x <= 55 && count < 5; x++) {
+                    for (int y = 8; y <= 12 && count < 5; y++) {
+                        com.badlogic.gdx.maps.tiled.TiledMapTileLayer.Cell cell = groundLayer.getCell(x, y);
+                        if (cell != null && cell.getTile() != null) {
+                            System.out.println("   Тайл (" + x + "," + y + "): ID " + cell.getTile().getId());
+                            count++;
+                        }
+                    }
+                }
+            }
+
+            mapRenderer = new OrthogonalTiledMapRenderer(map, 1f/32f); // Масштаб для тайлов 32x32
             System.out.println("✓ Рендерер карты создан");
 
         } catch (Exception e) {
@@ -87,7 +135,7 @@ public class GameScreen implements Screen {
             e.printStackTrace();
             throw e;
         }
-        world = new World(new Vector2(0, -12f), true);
+        world = new World(new Vector2(0, 0f), true); // Убираем гравитацию для свободного движения
         player = new Player(world, 2, 2);
         enemies = new Array<>();
         enemies.add(new Enemy(world, 8, 2, 7, 12));
@@ -98,33 +146,55 @@ public class GameScreen implements Screen {
     }
 
     private void createCollisionBodiesFromMap() {
-
         int tileWidth = map.getProperties().get("tilewidth", Integer.class);
         int tileHeight = map.getProperties().get("tileheight", Integer.class);
         int width = map.getProperties().get("width", Integer.class);
         int height = map.getProperties().get("height", Integer.class);
-        com.badlogic.gdx.maps.tiled.TiledMapTileLayer walls = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Walls");
-        if (walls == null) {
-            // Если слоя Walls нет, попробуем использовать первый слой
-            walls = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get(0);
+
+        // Ищем слой Walls, если нет - используем Ground, но с умной логикой
+        com.badlogic.gdx.maps.tiled.TiledMapTileLayer layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Walls");
+        if (layer == null) {
+            layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Ground");
+            System.out.println("⚠️ Слой Walls не найден, используем Ground с фильтрацией тайлов");
         }
-        if (walls == null) return;
+        if (layer == null) return;
+
+        // ID тайлов, которые должны быть стенами (непроходимыми)
+        // Для карты test_small.tmx: только границы карты (ID 15) - стены
+        int[] wallTileIds = {15}; // Только внешние границы
+
+        int collisionCount = 0;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-                com.badlogic.gdx.maps.tiled.TiledMapTileLayer.Cell cell = walls.getCell(x, y);
+                com.badlogic.gdx.maps.tiled.TiledMapTileLayer.Cell cell = layer.getCell(x, y);
                 if (cell != null && cell.getTile() != null) {
-                    BodyDef bodyDef = new BodyDef();
-                    bodyDef.type = BodyDef.BodyType.StaticBody;
-                    // Центр тайла (Box2D: 1 юнит = 1 тайл)
-                    bodyDef.position.set(x + 0.5f, y + 0.5f);
-                    Body body = world.createBody(bodyDef);
-                    PolygonShape shape = new PolygonShape();
-                    shape.setAsBox(0.5f, 0.5f); // Полтайла в каждую сторону
-                    body.createFixture(shape, 0);
-                    shape.dispose();
+                    int tileId = cell.getTile().getId();
+
+                    // Проверяем, является ли этот тайл стеной
+                    boolean isWall = false;
+                    for (int wallId : wallTileIds) {
+                        if (tileId == wallId) {
+                            isWall = true;
+                            break;
+                        }
+                    }
+
+                    if (isWall) {
+                        BodyDef bodyDef = new BodyDef();
+                        bodyDef.type = BodyDef.BodyType.StaticBody;
+                        // Центр тайла (Box2D: 1 юнит = 1 тайл)
+                        bodyDef.position.set(x + 0.5f, y + 0.5f);
+                        Body body = world.createBody(bodyDef);
+                        PolygonShape shape = new PolygonShape();
+                        shape.setAsBox(0.5f, 0.5f); // Полтайла в каждую сторону
+                        body.createFixture(shape, 0);
+                        shape.dispose();
+                        collisionCount++;
+                    }
                 }
             }
         }
+        System.out.println("✓ Создано " + collisionCount + " коллизионных тел");
     }
 
     private void saveGame() {
@@ -166,8 +236,8 @@ public class GameScreen implements Screen {
         world.step(delta, 6, 2);
         player.update(delta);
         for (Enemy e : enemies) e.update(delta, player.getPosition());
-        // Зафиксируем камеру в центре карты Level1
-        camera.position.set(10, 7.5f, 0); // Центр карты Level1
+        // Зафиксируем камеру в центре карты 20x15 тайлов
+        camera.position.set(10f, 7.5f, 0); // Центр карты в единицах тайлов
         camera.update();
 
         if (!debugPrinted) {
@@ -180,7 +250,7 @@ public class GameScreen implements Screen {
             debugPrinted = true;
         }
 
-        Gdx.gl.glClearColor(0.0f, 0.0f, 1.0f, 1); // СИНИЙ фон для теста
+        Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1); // Темно-синий фон для игры
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         // Рендерим карту
@@ -191,17 +261,75 @@ public class GameScreen implements Screen {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        // Временно отключаем игрока для тестирования карты
-        // player.render(batch);
-        // for (Enemy e : enemies) e.render(batch);
+        // Включаем игрока для проверки рендеринга
+        player.render(batch);
+        for (Enemy e : enemies) e.render(batch);
         batch.end();
+
+        // Рендеринг диалога выхода
+        if (showExitConfirm) {
+            renderExitDialog();
+        }
+
+        // Обработка диалога выхода
+        if (showExitConfirm) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
+                exitSelected = 1 - exitSelected;
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                if (exitSelected == 0) { // Да
+                    if (game != null) {
+                        game.setScreen(new FirstScreen(game));
+                    }
+                } else { // Нет
+                    showExitConfirm = false;
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                showExitConfirm = false;
+            }
+            return; // Не обрабатываем другие действия пока диалог открыт
+        }
+
+        // Обработка клавиши Escape для показа диалога выхода
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            showExitConfirm = true;
+            exitSelected = 0;
+        }
     }
 
     @Override
     public void resize(int width, int height) {
-        camera.viewportWidth = 20f;
-        camera.viewportHeight = 20f * height / (float)width;
+        // Простое и надежное масштабирование для полноэкранного режима
+        float mapWidth = 20f;  // Ширина карты в тайлах
+        float mapHeight = 15f; // Высота карты в тайлах
+
+        // Вычисляем соотношения сторон
+        float screenAspectRatio = (float) width / height;
+        float mapAspectRatio = mapWidth / mapHeight; // 20/15 = 1.33
+
+        // Простая логика: всегда показываем всю карту с небольшими отступами
+        float padding = 1.5f; // Отступ вокруг карты
+
+        if (screenAspectRatio > mapAspectRatio) {
+            // Экран шире карты - подгоняем по высоте
+            camera.viewportHeight = mapHeight + padding;
+            camera.viewportWidth = camera.viewportHeight * screenAspectRatio;
+        } else {
+            // Экран уже карты - подгоняем по ширине
+            camera.viewportWidth = mapWidth + padding;
+            camera.viewportHeight = camera.viewportWidth / screenAspectRatio;
+        }
+
+        // Убеждаемся, что камера всегда в центре карты
+        camera.position.set(mapWidth / 2f, mapHeight / 2f, 0);
         camera.update();
+
+        System.out.println("🔧 RESIZE DEBUG:");
+        System.out.println("   Screen: " + width + "x" + height + " (aspect: " + String.format("%.2f", screenAspectRatio) + ")");
+        System.out.println("   Map: " + mapWidth + "x" + mapHeight + " (aspect: " + String.format("%.2f", mapAspectRatio) + ")");
+        System.out.println("   Viewport: " + String.format("%.1f", camera.viewportWidth) + "x" + String.format("%.1f", camera.viewportHeight));
+        System.out.println("   Camera pos: " + String.format("%.1f", camera.position.x) + "," + String.format("%.1f", camera.position.y));
     }
 
     @Override
@@ -210,6 +338,75 @@ public class GameScreen implements Screen {
     public void resume() {}
     @Override
     public void hide() {}
+    // Рендеринг диалога выхода
+    private void renderExitDialog() {
+        int winW = Gdx.graphics.getWidth();
+        int winH = Gdx.graphics.getHeight();
+
+        // Создаем камеру для UI
+        OrthographicCamera uiCamera = new OrthographicCamera();
+        uiCamera.setToOrtho(false, winW, winH);
+        uiCamera.update();
+
+        String msg = "Вы уверены, что хотите выйти в главное меню?";
+        exitLayout.setText(exitTitleFont, msg);
+        float boxW = Math.max(exitLayout.width + 80, 400); // минимальная ширина
+        float boxH = 180;
+        float boxX = (winW - boxW) / 2f;
+        float boxY = (winH - boxH) / 2f;
+
+        // Настраиваем проекцию для UI
+        exitShapeRenderer.setProjectionMatrix(uiCamera.combined);
+
+        // Полупрозрачный фон
+        exitShapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        exitShapeRenderer.setColor(0, 0, 0, 0.7f);
+        exitShapeRenderer.rect(0, 0, winW, winH);
+
+        // Фон диалога
+        exitShapeRenderer.setColor(0.2f, 0.2f, 0.2f, 0.95f);
+        exitShapeRenderer.rect(boxX, boxY, boxW, boxH);
+
+        // Рамка диалога
+        exitShapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f);
+        exitShapeRenderer.rect(boxX - 2, boxY - 2, boxW + 4, 2); // верх
+        exitShapeRenderer.rect(boxX - 2, boxY + boxH, boxW + 4, 2); // низ
+        exitShapeRenderer.rect(boxX - 2, boxY, 2, boxH); // лево
+        exitShapeRenderer.rect(boxX + boxW, boxY, 2, boxH); // право
+        exitShapeRenderer.end();
+
+        // Настраиваем проекцию для текста
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+
+        // Текст диалога
+        exitTitleFont.setColor(Color.WHITE);
+        exitTitleFont.draw(batch, msg, boxX + (boxW - exitLayout.width) / 2f, boxY + boxH - 40);
+
+        // Кнопки
+        String yes = "Да";
+        String no = "Нет";
+        exitLayout.setText(exitFont, yes);
+        float yesX = boxX + 60;
+        float btnY = boxY + 60;
+        exitLayout.setText(exitFont, no);
+        float noX = boxX + boxW - 60 - exitLayout.width;
+
+        // Выделение выбранной кнопки
+        if (exitSelected == 0) {
+            exitFont.setColor(Color.GOLD);
+            exitFont.draw(batch, yes, yesX, btnY);
+            exitFont.setColor(Color.LIGHT_GRAY);
+            exitFont.draw(batch, no, noX, btnY);
+        } else {
+            exitFont.setColor(Color.LIGHT_GRAY);
+            exitFont.draw(batch, yes, yesX, btnY);
+            exitFont.setColor(Color.GOLD);
+            exitFont.draw(batch, no, noX, btnY);
+        }
+        batch.end();
+    }
+
     @Override
     public void dispose() {
         if (map != null) map.dispose();
@@ -218,5 +415,8 @@ public class GameScreen implements Screen {
         if (world != null) world.dispose();
         if (shapeRenderer != null) shapeRenderer.dispose();
         if (testTexture != null) testTexture.dispose();
+        if (exitFont != null) exitFont.dispose();
+        if (exitTitleFont != null) exitTitleFont.dispose();
+        if (exitShapeRenderer != null) exitShapeRenderer.dispose();
     }
 }

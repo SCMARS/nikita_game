@@ -28,7 +28,7 @@ public class Lwjgl3Launcher {
             // More conservative settings for macOS
             configuration.useVsync(false); // Disable VSync on macOS to avoid issues
             configuration.setForegroundFPS(60); // Fixed 60 FPS for stability
-            configuration.setWindowedMode(1280, 720); // Start in windowed mode
+            configuration.setFullscreenMode(Lwjgl3ApplicationConfiguration.getDisplayMode()); // Полный экран для macOS
             configuration.setResizable(true);
         } else {
             //// Vsync limits the frames per second to what your hardware can display, and helps eliminate
@@ -53,7 +53,7 @@ public class Lwjgl3Launcher {
             System.out.println("🔧 Configuration applied:");
             System.out.println("   - VSync: " + (isMac ? "disabled" : "enabled"));
             System.out.println("   - FPS: " + (isMac ? "60" : "auto"));
-            System.out.println("   - Window mode: " + (isMac ? "windowed 1280x720" : "fullscreen"));
+            System.out.println("   - Window mode: fullscreen");
         }
 
         return configuration;

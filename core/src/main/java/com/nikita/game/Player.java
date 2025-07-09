@@ -45,14 +45,24 @@ public class Player {
     }
 
     public void update(float delta) {
-        // Управление
-        float move = 0;
-        if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) move = -1;
-        if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) move = 1;
-        body.setLinearVelocity(move * 3f, body.getLinearVelocity().y);
+        // Управление во всех направлениях (WASD + стрелки)
+        float moveX = 0;
+        float moveY = 0;
 
-        // Прыжок
-        if ((Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.W)) && canJump) {
+        // Горизонтальное движение
+        if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveX = -1;
+        if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) moveX = 1;
+
+        // Вертикальное движение
+        if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN)) moveY = -1;
+        if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) moveY = 1;
+
+        // Применяем движение во всех направлениях
+        float speed = 3f;
+        body.setLinearVelocity(moveX * speed, moveY * speed);
+
+        // Прыжок (дополнительно на пробел для совместимости)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && canJump) {
             body.applyLinearImpulse(new Vector2(0, 6f), body.getWorldCenter(), true);
             canJump = false;
         }
@@ -98,4 +108,4 @@ public class Player {
     public void setSeals(int value) {
         this.seals = Math.max(0, value);
     }
-} 
+}

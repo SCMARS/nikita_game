@@ -62,7 +62,7 @@ public class PrologueScreen implements Screen {
             batch.setColor(1, 1, 1, 1);
             if (fade >= 1f) {
                 music.stop();
-                game.setScreen(new GameScreen("Level1.tmx"));
+                game.setScreen(new GameScreen(game, "maps/level_true.tmx"));
             }
         }
         batch.end();
@@ -98,4 +98,4 @@ public class PrologueScreen implements Screen {
         diary.dispose();
         music.dispose();
     }
-} 
+}

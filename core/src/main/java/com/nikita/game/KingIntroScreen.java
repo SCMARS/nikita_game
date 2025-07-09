@@ -55,7 +55,7 @@ public class KingIntroScreen implements Screen {
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("Roboto-Regular.ttf"));
         FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
         parameter.size = 32;
-        parameter.characters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789.,:!?\"'()[]{}<>-_=+/*\\%$#@&~|; abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ«»—…– ";
+        parameter.characters = FreeTypeFontGenerator.DEFAULT_CHARS + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя";
         font = generator.generateFont(parameter);
         parameter.size = 36;
         parameter.color = Color.GOLD;
@@ -161,7 +161,7 @@ public class KingIntroScreen implements Screen {
             batch.draw(kingIntro, drawX, drawY, drawW, drawH);
             batch.setColor(1,1,1,1);
             if (fade >= 1f) {
-                game.setScreen(new PrologueScreen(game));
+                game.setScreen(new GameScreen(game, "maps/test_small.tmx"));
             }
         }
         batch.end();
@@ -182,4 +182,4 @@ public class KingIntroScreen implements Screen {
         font.dispose();
         nameFont.dispose();
     }
-} 
+}
