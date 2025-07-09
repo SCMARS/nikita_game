@@ -161,7 +161,7 @@ public class KingIntroScreen implements Screen {
             batch.draw(kingIntro, drawX, drawY, drawW, drawH);
             batch.setColor(1,1,1,1);
             if (fade >= 1f) {
-                game.setScreen(new GameScreen(game, "maps/test_small.tmx"));
+                game.setScreen(new GameScreen(game, "maps/level_0.tmx"));
             }
         }
         batch.end();

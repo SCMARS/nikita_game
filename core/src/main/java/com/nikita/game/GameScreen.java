@@ -44,7 +44,7 @@ public class GameScreen implements Screen {
     private ShapeRenderer exitShapeRenderer;
 
     public GameScreen() {
-        this(null, "maps/test_small.tmx"); // Временно используем рабочую карту для отладки
+        this(null, "maps/level_0.tmx"); // Рабочая карта 20x15 с настройками
     }
 
     public GameScreen(String levelName) {
@@ -136,10 +136,19 @@ public class GameScreen implements Screen {
             throw e;
         }
         world = new World(new Vector2(0, 0f), true); // Убираем гравитацию для свободного движения
-        player = new Player(world, 2, 2);
+
+        // Устанавливаем игрока на координаты (13, 10)
+        float playerStartX = 13f; // X = 13
+        float playerStartY = 10f; // Y = 10
+
+        System.out.println("🎮 Игрок спавнится на позиции: (" + playerStartX + ", " + playerStartY + ")");
+        player = new Player(world, playerStartX, playerStartY);
         enemies = new Array<>();
-        enemies.add(new Enemy(world, 8, 2, 7, 12));
-        enemies.add(new Enemy(world, 15, 2, 14, 18));
+
+        // Размещаем врагов в разных частях карты 20x15
+        enemies.add(new Enemy(world, 5, 7, 3, 8));   // Левая часть
+        enemies.add(new Enemy(world, 15, 7, 13, 17)); // Правая часть
+        enemies.add(new Enemy(world, 10, 3, 8, 12));  // Центр внизу
         createCollisionBodiesFromMap();
         loadGame(); // Автоматическая загрузка прогресса
         saveGame(); // Автоматическое сохранение при старте уровня
@@ -151,23 +160,49 @@ public class GameScreen implements Screen {
         int width = map.getProperties().get("width", Integer.class);
         int height = map.getProperties().get("height", Integer.class);
 
-        // Ищем слой Walls, если нет - используем Ground, но с умной логикой
+        // Ищем слой для коллизий - пробуем разные варианты названий
         com.badlogic.gdx.maps.tiled.TiledMapTileLayer layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Walls");
         if (layer == null) {
             layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Ground");
-            System.out.println("⚠️ Слой Walls не найден, используем Ground с фильтрацией тайлов");
+            System.out.println("⚠️ Слой Walls не найден, пробуем Ground");
         }
-        if (layer == null) return;
+        if (layer == null) {
+            layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Прошарок плиток 1");
+            System.out.println("⚠️ Слой Ground не найден, пробуем 'Прошарок плиток 1'");
+        }
+        if (layer == null) {
+            // Берём первый доступный слой
+            if (map.getLayers().getCount() > 0) {
+                layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get(0);
+                System.out.println("⚠️ Используем первый доступный слой: " + layer.getName());
+            }
+        }
+        if (layer == null) {
+            System.out.println("❌ Не найден ни один слой для коллизий!");
+            return;
+        }
 
-        // ID тайлов, которые должны быть стенами (непроходимыми)
-        // Для карты test_small.tmx: только границы карты (ID 15) - стены
-        int[] wallTileIds = {15}; // Только внешние границы
+        System.out.println("🔧 Начинаем создание коллизий для карты " + width + "x" + height);
+        System.out.println("🔧 Используем комбинированную логику: границы + стены посередине");
+
+        // ID тайлов, которые должны быть стенами (создаем проход сверху)
+        int[] wallTileIds = {
+            // Границы карты с проходом сверху (убираем 2 тайла из середины верхней границы для прохода)
+            200, 201, 202, 203, 204, 205, 206, 207, 208, 209, /* 210, 211, */ 212, 213, 214, 215, 216, 217, 218, 219, // верх с проходом
+            543, 603, 663, 723, 2823, 2883, 2943, 3003, // левая граница
+            1138, 1198, 1258, 1378, 1438, 1018, 1887, 2000, // правая граница
+            987, 988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998, 2698, // низ
+            // Стены посередине карты
+            2132, 850
+        };
 
         int collisionCount = 0;
+        int totalTiles = 0;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 com.badlogic.gdx.maps.tiled.TiledMapTileLayer.Cell cell = layer.getCell(x, y);
                 if (cell != null && cell.getTile() != null) {
+                    totalTiles++;
                     int tileId = cell.getTile().getId();
 
                     // Проверяем, является ли этот тайл стеной
@@ -180,20 +215,33 @@ public class GameScreen implements Screen {
                     }
 
                     if (isWall) {
-                        BodyDef bodyDef = new BodyDef();
-                        bodyDef.type = BodyDef.BodyType.StaticBody;
-                        // Центр тайла (Box2D: 1 юнит = 1 тайл)
-                        bodyDef.position.set(x + 0.5f, y + 0.5f);
-                        Body body = world.createBody(bodyDef);
-                        PolygonShape shape = new PolygonShape();
-                        shape.setAsBox(0.5f, 0.5f); // Полтайла в каждую сторону
-                        body.createFixture(shape, 0);
-                        shape.dispose();
-                        collisionCount++;
+                        // Проверяем, не находится ли коллизия рядом с местом спавна игрока (двери)
+                        float playerStartX = 13f;
+                        float playerStartY = 10f;
+
+                        // Убираем коллизии в области дверей (около места спавна игрока)
+                        boolean nearPlayerSpawn = (Math.abs(x - playerStartX) <= 2 && Math.abs(y - playerStartY) <= 2);
+
+                        if (!nearPlayerSpawn) {
+                            System.out.println("🔧 Создаём стену ID " + tileId + " на позиции (" + x + "," + y + ")");
+                            BodyDef bodyDef = new BodyDef();
+                            bodyDef.type = BodyDef.BodyType.StaticBody;
+                            // Возвращаем коллизии в нормальное положение
+                            bodyDef.position.set(x + 0.5f, y + 0.5f);
+                            Body body = world.createBody(bodyDef);
+                            PolygonShape shape = new PolygonShape();
+                            shape.setAsBox(0.5f, 0.5f);
+                            body.createFixture(shape, 0);
+                            shape.dispose();
+                            collisionCount++;
+                        } else {
+                            System.out.println("🚪 Пропускаем коллизию в области дверей на позиции (" + x + "," + y + ")");
+                        }
                     }
                 }
             }
         }
+        System.out.println("🔧 Всего тайлов в слое: " + totalTiles);
         System.out.println("✓ Создано " + collisionCount + " коллизионных тел");
     }
 
@@ -236,7 +284,19 @@ public class GameScreen implements Screen {
         world.step(delta, 6, 2);
         player.update(delta);
         for (Enemy e : enemies) e.update(delta, player.getPosition());
+
         // Зафиксируем камеру в центре карты 20x15 тайлов
+        Vector2 playerPos = player.getPosition();
+
+        // Проверяем переход на новый уровень (правый нижний угол карты 20x15)
+        if (playerPos.x > 17f && playerPos.y < 3f) { // Правый нижний угол для карты 20x15
+            System.out.println("🎯 Переход на новый уровень!");
+            // Переходим на следующий уровень
+            if (game != null) {
+                game.setScreen(new GameScreen(game, "maps/level_2.tmx")); // Переход на уровень 2
+            }
+        }
+
         camera.position.set(10f, 7.5f, 0); // Центр карты в единицах тайлов
         camera.update();
 
