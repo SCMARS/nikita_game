@@ -17,6 +17,8 @@ public class Enemy {
     private boolean movingRight = true;
     private float speed = 2f;
     private boolean chasing = false;
+    private int health = 2; // Здоровье врага
+    private boolean isDead = false;
 
     public Enemy(World world, float x, float y, float patrolMinX, float patrolMaxX) {
         this.patrolMinX = patrolMinX;
@@ -70,4 +72,22 @@ public class Enemy {
     public Vector2 getPosition() {
         return body.getPosition();
     }
-} 
+
+    public void takeDamage(int damage) {
+        if (!isDead) {
+            health -= damage;
+            if (health <= 0) {
+                isDead = true;
+                System.out.println("💀 Враг убит!");
+            }
+        }
+    }
+
+    public boolean isDead() {
+        return isDead;
+    }
+
+    public int getHealth() {
+        return health;
+    }
+}
