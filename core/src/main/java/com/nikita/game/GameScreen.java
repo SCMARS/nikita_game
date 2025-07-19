@@ -35,7 +35,6 @@ public class GameScreen implements Screen {
     private String levelName;
     private com.badlogic.gdx.graphics.glutils.ShapeRenderer shapeRenderer;
     private com.badlogic.gdx.graphics.Texture testTexture;
-    private ItemManager itemManager;
 
     // Поля для диалога выхода
     private boolean showExitConfirm = false;
@@ -45,7 +44,7 @@ public class GameScreen implements Screen {
     private ShapeRenderer exitShapeRenderer;
 
     public GameScreen() {
-        this(null, "maps/level_0.tmx"); // Рабочая карта 20x15 с настройками
+        this(null, "maps/test_small.tmx"); // Временно используем рабочую карту для отладки
     }
 
     public GameScreen(String levelName) {
@@ -137,38 +136,13 @@ public class GameScreen implements Screen {
             throw e;
         }
         world = new World(new Vector2(0, 0f), true); // Убираем гравитацию для свободного движения
-
-        // Устанавливаем игрока на координаты (13, 10)
-        float playerStartX = 13f; // X = 13
-        float playerStartY = 10f; // Y = 10
-
-        System.out.println("🎮 Игрок спавнится на позиции: (" + playerStartX + ", " + playerStartY + ")");
-        player = new Player(world, playerStartX, playerStartY);
+        player = new Player(world, 2, 2);
         enemies = new Array<>();
-
-        // Размещаем врагов в разных частях карты 20x15
-        enemies.add(new Enemy(world, 5, 7, 3, 8));   // Левая часть
-        enemies.add(new Enemy(world, 15, 7, 13, 17)); // Правая часть
-        enemies.add(new Enemy(world, 10, 3, 8, 12));  // Центр внизу
+        enemies.add(new Enemy(world, 8, 2, 7, 12));
+        enemies.add(new Enemy(world, 15, 2, 14, 18));
         createCollisionBodiesFromMap();
         loadGame(); // Автоматическая загрузка прогресса
         saveGame(); // Автоматическое сохранение при старте уровня
-
-        // Создаем менеджер предметов
-        itemManager = new ItemManager(world);
-
-        // Добавляем тестовые предметы
-        spawnTestItems();
-    }
-
-    private void spawnTestItems() {
-        // Размещаем предметы на карте
-        itemManager.addCrystal(7f, 8f);
-        itemManager.addCrystal(14f, 12f);
-        itemManager.addHealthPotion(10f, 6f);
-        itemManager.addKey(16f, 9f);
-
-        System.out.println("💎 Создано предметов: " + itemManager.getItemCount());
     }
 
     private void createCollisionBodiesFromMap() {
@@ -177,49 +151,23 @@ public class GameScreen implements Screen {
         int width = map.getProperties().get("width", Integer.class);
         int height = map.getProperties().get("height", Integer.class);
 
-        // Ищем слой для коллизий - пробуем разные варианты названий
+        // Ищем слой Walls, если нет - используем Ground, но с умной логикой
         com.badlogic.gdx.maps.tiled.TiledMapTileLayer layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Walls");
         if (layer == null) {
             layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Ground");
-            System.out.println("⚠️ Слой Walls не найден, пробуем Ground");
+            System.out.println("⚠️ Слой Walls не найден, используем Ground с фильтрацией тайлов");
         }
-        if (layer == null) {
-            layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get("Прошарок плиток 1");
-            System.out.println("⚠️ Слой Ground не найден, пробуем 'Прошарок плиток 1'");
-        }
-        if (layer == null) {
-            // Берём первый доступный слой
-            if (map.getLayers().getCount() > 0) {
-                layer = (com.badlogic.gdx.maps.tiled.TiledMapTileLayer) map.getLayers().get(0);
-                System.out.println("⚠️ Используем первый доступный слой: " + layer.getName());
-            }
-        }
-        if (layer == null) {
-            System.out.println("❌ Не найден ни один слой для коллизий!");
-            return;
-        }
+        if (layer == null) return;
 
-        System.out.println("🔧 Начинаем создание коллизий для карты " + width + "x" + height);
-        System.out.println("🔧 Используем комбинированную логику: границы + стены посередине");
-
-        // ID тайлов, которые должны быть стенами (создаем проход сверху)
-        int[] wallTileIds = {
-            // Границы карты с проходом сверху (убираем 2 тайла из середины верхней границы для прохода)
-            200, 201, 202, 203, 204, 205, 206, 207, 208, 209, /* 210, 211, */ 212, 213, 214, 215, 216, 217, 218, 219, // верх с проходом
-            543, 603, 663, 723, 2823, 2883, 2943, 3003, // левая граница
-            1138, 1198, 1258, 1378, 1438, 1018, 1887, 2000, // правая граница
-            987, 988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998, 2698, // низ
-            // Стены посередине карты
-            2132, 850
-        };
+        // ID тайлов, которые должны быть стенами (непроходимыми)
+        // Для карты test_small.tmx: только границы карты (ID 15) - стены
+        int[] wallTileIds = {15}; // Только внешние границы
 
         int collisionCount = 0;
-        int totalTiles = 0;
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 com.badlogic.gdx.maps.tiled.TiledMapTileLayer.Cell cell = layer.getCell(x, y);
                 if (cell != null && cell.getTile() != null) {
-                    totalTiles++;
                     int tileId = cell.getTile().getId();
 
                     // Проверяем, является ли этот тайл стеной
@@ -232,42 +180,25 @@ public class GameScreen implements Screen {
                     }
 
                     if (isWall) {
-                        // Проверяем, не находится ли коллизия рядом с местом спавна игрока (двери)
-                        float playerStartX = 13f;
-                        float playerStartY = 10f;
-
-                        // Убираем коллизии в области дверей (около места спавна игрока)
-                        boolean nearPlayerSpawn = (Math.abs(x - playerStartX) <= 2 && Math.abs(y - playerStartY) <= 2);
-
-                        if (!nearPlayerSpawn) {
-                            System.out.println("🔧 Создаём стену ID " + tileId + " на позиции (" + x + "," + y + ")");
-                            BodyDef bodyDef = new BodyDef();
-                            bodyDef.type = BodyDef.BodyType.StaticBody;
-                            // Возвращаем коллизии в нормальное положение
-                            bodyDef.position.set(x + 0.5f, y + 0.5f);
-                            Body body = world.createBody(bodyDef);
-                            PolygonShape shape = new PolygonShape();
-                            shape.setAsBox(0.5f, 0.5f);
-                            body.createFixture(shape, 0);
-                            shape.dispose();
-                            collisionCount++;
-                        } else {
-                            System.out.println("🚪 Пропускаем коллизию в области дверей на позиции (" + x + "," + y + ")");
-                        }
+                        BodyDef bodyDef = new BodyDef();
+                        bodyDef.type = BodyDef.BodyType.StaticBody;
+                        // Центр тайла (Box2D: 1 юнит = 1 тайл)
+                        bodyDef.position.set(x + 0.5f, y + 0.5f);
+                        Body body = world.createBody(bodyDef);
+                        PolygonShape shape = new PolygonShape();
+                        shape.setAsBox(0.5f, 0.5f); // Полтайла в каждую сторону
+                        body.createFixture(shape, 0);
+                        shape.dispose();
+                        collisionCount++;
                     }
                 }
             }
         }
-        System.out.println("🔧 Всего тайлов в слое: " + totalTiles);
         System.out.println("✓ Создано " + collisionCount + " коллизионных тел");
     }
 
     private void saveGame() {
-        saveCheckpoint();
-    }
-
-    private void saveCheckpoint() {
-        Preferences prefs = Gdx.app.getPreferences("checkpoint");
+        Preferences prefs = Gdx.app.getPreferences("save");
         prefs.putString("level", levelName);
         prefs.putFloat("player_x", player.getPosition().x);
         prefs.putFloat("player_y", player.getPosition().y);
@@ -275,25 +206,17 @@ public class GameScreen implements Screen {
         prefs.putInteger("player_keys", player.getKeys());
         prefs.putInteger("player_seals", player.getSeals());
         prefs.flush();
-        System.out.println("💾 Чекпоинт сохранен на позиции: " + player.getPosition());
     }
 
     private void loadGame() {
-        loadFromCheckpoint();
-    }
-
-    private void loadFromCheckpoint() {
-        Preferences prefs = Gdx.app.getPreferences("checkpoint");
+        Preferences prefs = Gdx.app.getPreferences("save");
         if (prefs.contains("level") && prefs.getString("level").equals(levelName)) {
-            float x = prefs.getFloat("player_x", 13f); // Дефолтная позиция спавна
-            float y = prefs.getFloat("player_y", 10f);
+            float x = prefs.getFloat("player_x", 2f);
+            float y = prefs.getFloat("player_y", 2f);
             player.body.setTransform(x, y, 0);
             player.setHealth(prefs.getInteger("player_health", 3));
             player.setKeys(prefs.getInteger("player_keys", 0));
             player.setSeals(prefs.getInteger("player_seals", 0));
-            System.out.println("📂 Загружен чекпоинт на позиции: " + x + ", " + y);
-        } else {
-            System.out.println("📂 Чекпоинт не найден, используется стандартная позиция спавна");
         }
     }
 
@@ -301,65 +224,6 @@ public class GameScreen implements Screen {
     public void endLevel() {
         saveGame();
         // Здесь можно добавить переход на следующий уровень или экран победы
-    }
-
-    private void updateEnemies(float delta) {
-        // Обновляем врагов и проверяем коллизии
-        for (int i = enemies.size - 1; i >= 0; i--) {
-            Enemy enemy = enemies.get(i);
-
-            if (enemy.isDead()) {
-                // Удаляем мертвого врага из мира и массива
-                world.destroyBody(enemy.body);
-                enemies.removeIndex(i);
-                continue;
-            }
-
-            enemy.update(delta, player.getPosition());
-
-            // Проверяем коллизию игрока с врагом (урон игроку)
-            float distanceToPlayer = enemy.getPosition().dst(player.getPosition());
-            if (distanceToPlayer < 1.0f) { // Если игрок близко к врагу
-                player.takeDamage(1); // Наносим урон игроку
-            }
-
-            // Проверяем атаку игрока по врагу
-            if (player.canAttackHit()) {
-                float attackRange = 1.5f; // Дальность атаки
-                if (distanceToPlayer < attackRange) {
-                    enemy.takeDamage(1);
-                    player.setAttackHit(); // Помечаем, что атака уже сработала
-                    System.out.println("⚔️ Игрок атакует врага!");
-                }
-            }
-        }
-    }
-
-    private float lastCheckpointX = -1000f; // Последняя X координата чекпоинта
-
-    private void checkForCheckpoints(Vector2 playerPos) {
-        // Создаем чекпоинты каждые 10 единиц по X координате
-        float checkpointInterval = 10f;
-        float currentCheckpointX = Math.round(playerPos.x / checkpointInterval) * checkpointInterval;
-
-        // Если игрок достиг новой чекпоинт-зоны
-        if (Math.abs(currentCheckpointX - lastCheckpointX) >= checkpointInterval) {
-            lastCheckpointX = currentCheckpointX;
-            saveCheckpoint();
-        }
-
-        // Дополнительные чекпоинты в ключевых точках карты
-        if ((playerPos.x > 25f && playerPos.x < 27f && playerPos.y > 8f && playerPos.y < 12f) ||
-            (playerPos.x > 50f && playerPos.x < 52f && playerPos.y > 8f && playerPos.y < 12f) ||
-            (playerPos.x > 75f && playerPos.x < 77f && playerPos.y > 8f && playerPos.y < 12f)) {
-
-            // Проверяем, что мы не сохраняли недавно в этой области
-            Preferences prefs = Gdx.app.getPreferences("checkpoint");
-            float lastSavedX = prefs.getFloat("player_x", -1000f);
-            if (Math.abs(playerPos.x - lastSavedX) > 5f) {
-                saveCheckpoint();
-            }
-        }
     }
 
     @Override
@@ -371,37 +235,8 @@ public class GameScreen implements Screen {
     public void render(float delta) {
         world.step(delta, 6, 2);
         player.update(delta);
-
-        // Обновляем врагов и проверяем коллизии
-        updateEnemies(delta);
-
-        // Обновляем предметы
-        itemManager.update(delta, player);
-
-        // Проверяем смерть игрока
-        if (player.isDead()) {
-            if (game != null) {
-                game.setScreen(new GameOverScreen(game, levelName, player.getHealth()));
-            }
-            return;
-        }
-
+        for (Enemy e : enemies) e.update(delta, player.getPosition());
         // Зафиксируем камеру в центре карты 20x15 тайлов
-        Vector2 playerPos = player.getPosition();
-
-        // Проверяем чекпоинты (автосохранение в определенных точках)
-        checkForCheckpoints(playerPos);
-
-        // Проверяем переход на новый уровень (правый нижний угол карты 20x15)
-        if (playerPos.x > 17f && playerPos.y < 3f) { // Правый нижний угол для карты 20x15
-            System.out.println("🎯 Переход на новый уровень!");
-            saveCheckpoint(); // Сохраняем перед переходом
-            // Переходим на следующий уровень
-            if (game != null) {
-                game.setScreen(new GameScreen(game, "maps/level_2.tmx")); // Переход на уровень 2
-            }
-        }
-
         camera.position.set(10f, 7.5f, 0); // Центр карты в единицах тайлов
         camera.update();
 
@@ -429,12 +264,6 @@ public class GameScreen implements Screen {
         // Включаем игрока для проверки рендеринга
         player.render(batch);
         for (Enemy e : enemies) e.render(batch);
-        batch.end();
-
-        // Рендерим предметы
-        batch.setProjectionMatrix(camera.combined);
-        batch.begin();
-        itemManager.render(batch);
         batch.end();
 
         // Рендеринг диалога выхода
@@ -589,7 +418,5 @@ public class GameScreen implements Screen {
         if (exitFont != null) exitFont.dispose();
         if (exitTitleFont != null) exitTitleFont.dispose();
         if (exitShapeRenderer != null) exitShapeRenderer.dispose();
-        if (player != null) player.dispose();
-        if (itemManager != null) itemManager.dispose();
     }
 }
