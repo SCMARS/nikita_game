@@ -36,6 +36,27 @@ public class GameScreen implements Screen {
     private com.badlogic.gdx.graphics.glutils.ShapeRenderer shapeRenderer;
     private com.badlogic.gdx.graphics.Texture testTexture;
 
+    // Переменные для системы переключения между частями уровня
+    private int currentLevelPart = 1; // Текущая часть уровня
+    private int totalLevelParts = 3;  // Общее количество частей уровня
+    private Array<Vector2> levelPartTransitions; // Точки перехода между частями уровня
+    
+    // Защита от зацикливания переходов
+    private float lastTransitionTime = 0f;
+    private final float TRANSITION_COOLDOWN = 2.0f; // Задержка между переходами в секундах
+    private boolean transitionInProgress = false;
+    private float gameTime = 0f; // Накопленное время игры
+    
+    // Переменные для перехода на следующий уровень
+    private boolean levelCompleted = false;
+    private float levelCompleteTimer = 0f;
+    private final float LEVEL_COMPLETE_DELAY = 2f; // Задержка перед переходом на следующий уровень
+    private String nextLevelName = "maps/level_1.tmx"; // Следующий уровень
+    
+    // Переменные для коллизий
+    private Array<Body> collisionBodies;
+    private boolean collisionEnabled = true;
+
     // Поля для диалога выхода
     private boolean showExitConfirm = false;
     private int exitSelected = 0; // 0 - Да, 1 - Нет
@@ -138,14 +159,35 @@ public class GameScreen implements Screen {
         world = new World(new Vector2(0, 0f), true); // Убираем гравитацию для свободного движения
         player = new Player(world, 2, 2);
         enemies = new Array<>();
-        enemies.add(new Enemy(world, 8, 2, 7, 12));
-        enemies.add(new Enemy(world, 15, 2, 14, 18));
+        collisionBodies = new Array<>(); // Инициализируем массив коллизионных тел
+
+        // Инициализация точек перехода между частями уровня
+        levelPartTransitions = new Array<>();
+        levelPartTransitions.add(new Vector2(17, 7.5f)); // Переход из части 1 в часть 2 (правый край карты)
+        levelPartTransitions.add(new Vector2(3, 7.5f));  // Переход из части 2 в часть 1 (левый край карты)
+        levelPartTransitions.add(new Vector2(10, 13));   // Переход из части 1/2 в часть 3 (верхний край карты)
+        levelPartTransitions.add(new Vector2(10, 2));    // Переход из части 3 в часть 1 (нижний край карты)
+        
+        // Добавляем специальную точку перехода на следующий уровень
+        levelPartTransitions.add(new Vector2(10, 12));   // Точка перехода на следующий уровень (более доступная)
+
+        // Инициализация врагов для первой части уровня
+        initLevelPart(currentLevelPart);
+
         createCollisionBodiesFromMap();
         loadGame(); // Автоматическая загрузка прогресса
         saveGame(); // Автоматическое сохранение при старте уровня
     }
 
     private void createCollisionBodiesFromMap() {
+        // Очищаем старые коллизионные тела
+        for (Body body : collisionBodies) {
+            if (body != null) {
+                world.destroyBody(body);
+            }
+        }
+        collisionBodies.clear();
+        
         int tileWidth = map.getProperties().get("tilewidth", Integer.class);
         int tileHeight = map.getProperties().get("tileheight", Integer.class);
         int width = map.getProperties().get("width", Integer.class);
@@ -160,8 +202,8 @@ public class GameScreen implements Screen {
         if (layer == null) return;
 
         // ID тайлов, которые должны быть стенами (непроходимыми)
-        // Для карты test_small.tmx: только границы карты (ID 15) - стены
-        int[] wallTileIds = {15}; // Только внешние границы
+        // Уменьшаем список стен - оставляем только явные препятствия
+        int[] wallTileIds = {15, 16, 17, 18, 19, 20}; // Только основные стены
 
         int collisionCount = 0;
         for (int x = 0; x < width; x++) {
@@ -186,9 +228,10 @@ public class GameScreen implements Screen {
                         bodyDef.position.set(x + 0.5f, y + 0.5f);
                         Body body = world.createBody(bodyDef);
                         PolygonShape shape = new PolygonShape();
-                        shape.setAsBox(0.5f, 0.5f); // Полтайла в каждую сторону
+                        shape.setAsBox(0.4f, 0.4f); // Уменьшаем размер коллизии
                         body.createFixture(shape, 0);
                         shape.dispose();
+                        collisionBodies.add(body); // Добавляем в массив для отслеживания
                         collisionCount++;
                     }
                 }
@@ -214,7 +257,7 @@ public class GameScreen implements Screen {
             float x = prefs.getFloat("player_x", 2f);
             float y = prefs.getFloat("player_y", 2f);
             player.body.setTransform(x, y, 0);
-            player.setHealth(prefs.getInteger("player_health", 3));
+            player.setHealth(prefs.getInteger("player_health", 4));
             player.setKeys(prefs.getInteger("player_keys", 0));
             player.setSeals(prefs.getInteger("player_seals", 0));
         }
@@ -225,6 +268,189 @@ public class GameScreen implements Screen {
         saveGame();
         // Здесь можно добавить переход на следующий уровень или экран победы
     }
+    
+    /**
+     * Проверяет, завершен ли уровень и инициирует переход на следующий
+     */
+    private void checkLevelCompletion() {
+        if (levelCompleted) {
+            levelCompleteTimer += Gdx.graphics.getDeltaTime();
+            System.out.println("⏰ Таймер завершения уровня: " + levelCompleteTimer + "/" + LEVEL_COMPLETE_DELAY);
+            
+            if (levelCompleteTimer >= LEVEL_COMPLETE_DELAY) {
+                // Переход на следующий уровень
+                System.out.println("🚀 Выполняем переход на следующий уровень!");
+                goToNextLevel();
+            }
+        }
+    }
+    
+    /**
+     * Отмечает уровень как завершенный
+     */
+    public void completeLevel() {
+        if (!levelCompleted) {
+            levelCompleted = true;
+            levelCompleteTimer = 0f;
+            System.out.println("🎯 Уровень отмечен как завершенный!");
+            
+            // Дополнительное сообщение для первого уровня
+            if (levelName != null && (levelName.contains("level_0") || levelName.contains("test_small"))) {
+                System.out.println("🎬 Подготовка к катсцене завершения первого уровня...");
+            } else {
+                System.out.println("🎉 Переход на следующий уровень...");
+            }
+        }
+    }
+    
+    /**
+     * Определяет следующий уровень на основе текущего
+     */
+    private String getNextLevelName() {
+        if (levelName == null) return "maps/level_0.tmx";
+        
+        // Определяем следующий уровень на основе текущего
+        if (levelName.contains("level_0") || levelName.contains("test_small")) {
+            return "maps/level_2.tmx";
+        } else if (levelName.contains("level_2")) {
+            return "maps/level_true_fixed.tmx";
+        } else if (levelName.contains("level_true") || levelName.contains("level_true_fixed")) {
+            // Последний уровень - переход на экран победы или главное меню
+            return "victory";
+        } else {
+            // По умолчанию возвращаем первый уровень
+            return "maps/level_0.tmx";
+        }
+    }
+    
+    /**
+     * Переходит на следующий уровень
+     */
+    private void goToNextLevel() {
+        String nextLevel = getNextLevelName();
+        
+        if (nextLevel.equals("victory")) {
+            // Переход на экран победы
+            System.out.println("🎉 Победа! Игра завершена!");
+            if (game != null) {
+                game.setScreen(new FirstScreen(game));
+            }
+        } else {
+            // Проверяем, нужно ли показать катсцену для первого уровня
+            if (levelName != null && (levelName.contains("level_0") || levelName.contains("test_small"))) {
+                System.out.println("🎬 Запуск катсцены завершения первого уровня!");
+                if (game != null) {
+                    game.setScreen(new Level1EndCutscene(game));
+                }
+            } else {
+                // Переход на следующий уровень
+                System.out.println("🎉 Переход на следующий уровень: " + nextLevel);
+                if (game != null) {
+                    game.setScreen(new GameScreen(game, nextLevel));
+                }
+            }
+        }
+    }
+
+    /**
+     * Инициализирует врагов для указанной части уровня
+     * @param levelPart номер части уровня (1, 2, 3)
+     */
+    private void initLevelPart(int levelPart) {
+        // Очищаем список врагов
+        for (Enemy enemy : enemies) {
+            if (enemy.body != null) {
+                world.destroyBody(enemy.body);
+            }
+        }
+        enemies.clear();
+
+        // Добавляем врагов в зависимости от части уровня
+        switch (levelPart) {
+            case 1:
+                // Враги для первой части уровня
+                enemies.add(new Enemy(world, 8, 2, 7, 12));
+                enemies.add(new Enemy(world, 15, 2, 14, 18));
+                break;
+            case 2:
+                // Враги для второй части уровня
+                enemies.add(new Enemy(world, 5, 5, 3, 8));
+                enemies.add(new Enemy(world, 12, 8, 10, 15));
+                enemies.add(new Enemy(world, 18, 3, 16, 19));
+                break;
+            case 3:
+                // Враги для третьей части уровня (босс)
+                enemies.add(new Enemy(world, 10, 7, 8, 12));
+                enemies.add(new Enemy(world, 5, 10, 3, 7));
+                enemies.add(new Enemy(world, 15, 10, 13, 17));
+                break;
+        }
+
+        System.out.println("🔄 Инициализирована часть уровня " + levelPart + " с " + enemies.size + " врагами");
+    }
+
+    /**
+     * Переключает на указанную часть уровня
+     * @param newLevelPart номер новой части уровня
+     */
+    private void switchLevelPart(int newLevelPart) {
+        if (newLevelPart < 1 || newLevelPart > totalLevelParts) {
+            System.out.println("⚠️ Попытка перехода на несуществующую часть уровня: " + newLevelPart);
+            return;
+        }
+
+        if (newLevelPart == currentLevelPart) {
+            return; // Уже находимся в этой части
+        }
+
+        // Проверяем задержку между переходами
+        if (gameTime - lastTransitionTime < TRANSITION_COOLDOWN) {
+            System.out.println("⏳ Слишком рано для перехода, ждем...");
+            return;
+        }
+
+        if (transitionInProgress) {
+            System.out.println("⚠️ Переход уже в процессе");
+            return;
+        }
+
+        transitionInProgress = true;
+        lastTransitionTime = gameTime;
+
+        System.out.println("🔄 Переход с части " + currentLevelPart + " на часть " + newLevelPart);
+
+        // Сохраняем текущее положение игрока
+        Vector2 playerPos = player.getPosition();
+
+        // Устанавливаем новую позицию игрока в зависимости от перехода с буферной зоной
+        if (currentLevelPart == 1 && newLevelPart == 2) {
+            // Переход из части 1 в часть 2 (справа)
+            player.body.setTransform(3, playerPos.y, 0);
+        } else if (currentLevelPart == 2 && newLevelPart == 1) {
+            // Переход из части 2 в часть 1 (слева)
+            player.body.setTransform(17, playerPos.y, 0);
+        } else if (newLevelPart == 3) {
+            // Переход в часть 3 (сверху) - устанавливаем позицию подальше от точки перехода
+            player.body.setTransform(10, 4, 0);
+        } else if (currentLevelPart == 3) {
+            // Переход из части 3 (снизу) - устанавливаем позицию подальше от точки перехода
+            player.body.setTransform(10, 11, 0);
+        }
+
+        // Обновляем текущую часть уровня
+        currentLevelPart = newLevelPart;
+
+        // Инициализируем врагов для новой части уровня
+        initLevelPart(currentLevelPart);
+
+        // Сбрасываем флаг перехода через небольшую задержку
+        Gdx.app.postRunnable(new Runnable() {
+            @Override
+            public void run() {
+                transitionInProgress = false;
+            }
+        });
+    }
 
     @Override
     public void show() {}
@@ -233,9 +459,173 @@ public class GameScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        // Накопление времени игры для защиты от зацикливания переходов
+        gameTime += delta;
+        
+        // Обработка клавиши Escape для показа диалога выхода (в начале метода)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            showExitConfirm = true;
+            exitSelected = 0;
+        }
+
+        // Обработка диалога выхода
+        if (showExitConfirm) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
+                exitSelected = 1 - exitSelected;
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                if (exitSelected == 0) { // Да
+                    if (game != null) {
+                        game.setScreen(new FirstScreen(game));
+                    }
+                } else { // Нет
+                    showExitConfirm = false;
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                showExitConfirm = false;
+            }
+            
+            // Рендерим диалог выхода
+            renderExitDialog();
+            return; // Не обрабатываем другие действия пока диалог открыт
+        }
+
         world.step(delta, 6, 2);
         player.update(delta);
-        for (Enemy e : enemies) e.update(delta, player.getPosition());
+
+        // Проверяем завершение уровня
+        checkLevelCompletion();
+
+        // Обработка атак игрока по врагам
+        if (player.canAttackHit()) {
+            Vector2 playerPos = player.getPosition();
+            float attackRange = 1.5f; // Дальность атаки игрока
+
+            for (int i = 0; i < enemies.size; i++) {
+                Enemy enemy = enemies.get(i);
+                if (!enemy.isDead()) {
+                    Vector2 enemyPos = enemy.getPosition();
+                    float distance = playerPos.dst(enemyPos);
+
+                    if (distance <= attackRange) {
+                        enemy.takeDamage(1); // Наносим 1 урон (враг умрет после 2 ударов)
+                        player.setAttackHit(); // Помечаем, что атака попала
+                        System.out.println("🗡️ Игрок атаковал врага! Здоровье врага: " + enemy.getHealth());
+                        break; // Атакуем только одного врага за раз
+                    }
+                }
+            }
+        }
+
+        // Обновление врагов и проверка их атак на игрока
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy enemy = enemies.get(i);
+
+            if (enemy.isDead()) {
+                // Удаляем мертвых врагов из мира и из списка
+                world.destroyBody(enemy.body);
+                enemies.removeIndex(i);
+                System.out.println("💀 Враг удален из игрового мира!");
+            } else {
+                enemy.update(delta, player.getPosition());
+
+                // Проверка атаки врага на игрока
+                Vector2 playerPos = player.getPosition();
+                Vector2 enemyPos = enemy.getPosition();
+                float distance = playerPos.dst(enemyPos);
+
+                if (distance <= 1.0f && !player.isInvulnerable()) {
+                    player.takeDamage(1); // Наносим 1 урон игроку
+                    System.out.println("⚔️ Враг атаковал игрока! Здоровье игрока: " + player.getHealth());
+                }
+            }
+        }
+
+        // Проверка завершения уровня (все враги убиты или игрок достиг точки перехода)
+        if (enemies.size == 0 && !levelCompleted && currentLevelPart == totalLevelParts) {
+            System.out.println("🎯 Все враги убиты! Уровень завершен!");
+            completeLevel();
+        }
+
+        // Проверка смерти игрока
+        if (player.isDead()) {
+            // Обработка смерти игрока - переход на экран Game Over
+            System.out.println("💀 Игрок умер! Переход на экран Game Over");
+
+            // Задержка перед переходом на экран Game Over (3 секунды)
+            // В реальной игре здесь можно добавить анимацию смерти
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // Переход на начальный экран (или специальный экран Game Over, если он будет создан)
+            if (game != null) {
+                game.setScreen(new FirstScreen(game));
+            }
+            return; // Прекращаем выполнение метода render
+        }
+
+        // Проверка перехода между частями уровня
+        Vector2 playerPos = player.getPosition();
+
+        // Проверяем все точки перехода
+        float transitionDistance = 3.0f; // Увеличиваем расстояние для более легких переходов
+
+        // Отладочный вывод позиции игрока для диагностики переходов
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
+            System.out.println("🔍 Отладка переходов:");
+            System.out.println("   Позиция игрока: " + playerPos);
+            System.out.println("   Текущая часть уровня: " + currentLevelPart);
+            System.out.println("   💡 Удерживайте F1 для отображения точек перехода на экране");
+            for (int i = 0; i < levelPartTransitions.size; i++) {
+                Vector2 transPoint = levelPartTransitions.get(i);
+                float dist = playerPos.dst(transPoint);
+                System.out.println("   Расстояние до точки перехода " + i + " (" + transPoint.x + "," + transPoint.y + "): " + dist);
+            }
+        }
+
+        // Проверка перехода на следующий уровень (когда игрок достигает определенной точки в последней части)
+        if (currentLevelPart == totalLevelParts && playerPos.dst(levelPartTransitions.get(4)) < transitionDistance && !levelCompleted) {
+            // Игрок достиг точки перехода на следующий уровень в последней части
+            System.out.println("🎯 Игрок достиг точки перехода на следующий уровень!");
+            System.out.println("   Позиция игрока: " + playerPos);
+            System.out.println("   Точка перехода: " + levelPartTransitions.get(4));
+            System.out.println("   Расстояние: " + playerPos.dst(levelPartTransitions.get(4)));
+            System.out.println("   Текущая часть: " + currentLevelPart + "/" + totalLevelParts);
+            completeLevel();
+        }
+        // Альтернативная проверка: если игрок находится в любой части и убил всех врагов
+        else if (enemies.size == 0 && !levelCompleted) {
+            System.out.println("🎯 Все враги убиты! Уровень завершен!");
+            System.out.println("   Позиция игрока: " + playerPos);
+            System.out.println("   Текущая часть: " + currentLevelPart + "/" + totalLevelParts);
+            completeLevel();
+        }
+        // Переход из части 1 в часть 2 (правый край карты)
+        else if (currentLevelPart == 1 && playerPos.dst(levelPartTransitions.get(0)) < transitionDistance && !transitionInProgress) {
+            System.out.println("🔄 Переход из части 1 в часть 2 (правый край)");
+            switchLevelPart(2);
+        }
+        // Переход из части 2 в часть 1 (левый край карты)
+        else if (currentLevelPart == 2 && playerPos.dst(levelPartTransitions.get(1)) < transitionDistance && !transitionInProgress) {
+            System.out.println("🔄 Переход из части 2 в часть 1 (левый край)");
+            switchLevelPart(1);
+        }
+        // Переход из части 1 или 2 в часть 3 (верхний край карты)
+        else if ((currentLevelPart == 1 || currentLevelPart == 2) &&
+                 playerPos.dst(levelPartTransitions.get(2)) < transitionDistance && !transitionInProgress) {
+            System.out.println("🔄 Переход из части " + currentLevelPart + " в часть 3 (верхний край)");
+            switchLevelPart(3);
+        }
+        // Переход из части 3 в часть 1 (нижний край карты)
+        else if (currentLevelPart == 3 && playerPos.dst(levelPartTransitions.get(3)) < transitionDistance && !transitionInProgress) {
+            System.out.println("🔄 Переход из части 3 в часть 1 (нижний край)");
+            switchLevelPart(1);
+        }
+        
         // Зафиксируем камеру в центре карты 20x15 тайлов
         camera.position.set(10f, 7.5f, 0); // Центр карты в единицах тайлов
         camera.update();
@@ -259,43 +649,33 @@ public class GameScreen implements Screen {
             mapRenderer.render();
         }
 
+        // Рендерим игрока
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        // Включаем игрока для проверки рендеринга
         player.render(batch);
-        for (Enemy e : enemies) e.render(batch);
         batch.end();
 
+        // Рендерим врагов
+        batch.begin();
+        for (Enemy enemy : enemies) {
+            enemy.render(batch);
+        }
+        batch.end();
+
+        // Рендерим индикацию завершения уровня
+        if (levelCompleted) {
+            renderLevelCompleteIndicator();
+        }
+
+        // Рендерим точки перехода для отладки (только при нажатии F1)
+        if (Gdx.input.isKeyPressed(Input.Keys.F1)) {
+            renderTransitionPoints();
+        }
+
         // Рендеринг диалога выхода
-        if (showExitConfirm) {
-            renderExitDialog();
-        }
-
-        // Обработка диалога выхода
-        if (showExitConfirm) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
-                exitSelected = 1 - exitSelected;
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                if (exitSelected == 0) { // Да
-                    if (game != null) {
-                        game.setScreen(new FirstScreen(game));
-                    }
-                } else { // Нет
-                    showExitConfirm = false;
-                }
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-                showExitConfirm = false;
-            }
-            return; // Не обрабатываем другие действия пока диалог открыт
-        }
-
-        // Обработка клавиши Escape для показа диалога выхода
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            showExitConfirm = true;
-            exitSelected = 0;
-        }
+        // if (showExitConfirm) { // This block is now handled at the beginning of render
+        //     renderExitDialog();
+        // }
     }
 
     @Override
@@ -404,6 +784,110 @@ public class GameScreen implements Screen {
             exitFont.setColor(Color.GOLD);
             exitFont.draw(batch, no, noX, btnY);
         }
+        batch.end();
+    }
+
+    /**
+     * Рендерит индикацию завершения уровня
+     */
+    private void renderLevelCompleteIndicator() {
+        // Рендерим полупрозрачный фон
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0, 0, 0, 0.7f);
+        shapeRenderer.rect(0, 0, camera.viewportWidth, camera.viewportHeight);
+        shapeRenderer.end();
+
+        // Рендерим текст завершения уровня
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        
+        String completeText = "🎯 Уровень завершен!";
+        String nextLevelText = "Переход на следующий уровень...";
+        String cutsceneText = "Подготовка к катсцене...";
+        
+        // Центрируем текст
+        exitLayout.setText(exitTitleFont, completeText);
+        float textX = (camera.viewportWidth - exitLayout.width) / 2;
+        float textY = camera.viewportHeight / 2 + 80;
+        
+        exitTitleFont.setColor(Color.GOLD);
+        exitTitleFont.draw(batch, completeText, textX, textY);
+        
+        // Текст о переходе
+        exitLayout.setText(exitFont, nextLevelText);
+        textX = (camera.viewportWidth - exitLayout.width) / 2;
+        textY = camera.viewportHeight / 2;
+        
+        exitFont.setColor(Color.WHITE);
+        exitFont.draw(batch, nextLevelText, textX, textY);
+        
+        // Дополнительный текст для катсцены
+        if (levelName != null && (levelName.contains("level_0") || levelName.contains("test_small"))) {
+            exitLayout.setText(exitFont, cutsceneText);
+            textX = (camera.viewportWidth - exitLayout.width) / 2;
+            textY = camera.viewportHeight / 2 - 80;
+            
+            exitFont.setColor(Color.CYAN);
+            exitFont.draw(batch, cutsceneText, textX, textY);
+        }
+        
+        batch.end();
+    }
+
+    /**
+     * Рендерит точки перехода для отладки
+     */
+    private void renderTransitionPoints() {
+        if (mapRenderer == null || map == null) return;
+
+        // Рендерим точки перехода
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        
+        for (int i = 0; i < levelPartTransitions.size; i++) {
+            Vector2 transPoint = levelPartTransitions.get(i);
+            
+            // Разные цвета для разных типов переходов
+            if (i == 4) {
+                // Точка перехода на следующий уровень - красный цвет
+                shapeRenderer.setColor(1, 0, 0, 0.7f);
+            } else {
+                // Обычные точки перехода между частями - зеленый цвет
+                shapeRenderer.setColor(0, 1, 0, 0.5f);
+            }
+            
+            shapeRenderer.circle(transPoint.x, transPoint.y, 0.5f);
+        }
+        
+        shapeRenderer.end();
+
+        // Рисуем текст рядом с точками
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        
+        for (int i = 0; i < levelPartTransitions.size; i++) {
+            Vector2 transPoint = levelPartTransitions.get(i);
+            String label;
+            if (i == 4) {
+                label = "NEXT"; // Следующий уровень
+            } else {
+                label = "T" + i; // Обычные переходы
+            }
+            
+            exitLayout.setText(exitFont, label);
+            float textX = transPoint.x + 0.8f;
+            float textY = transPoint.y + 0.3f;
+            
+            if (i == 4) {
+                exitFont.setColor(Color.RED);
+            } else {
+                exitFont.setColor(Color.WHITE);
+            }
+            
+            exitFont.draw(batch, label, textX, textY);
+        }
+        
         batch.end();
     }
 

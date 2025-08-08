@@ -44,4 +44,4 @@ public class Altar extends InteractiveObject {
 
     @Override
     public boolean isActive() { return !activated; }
-} 
+}

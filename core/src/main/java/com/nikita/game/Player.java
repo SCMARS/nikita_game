@@ -31,8 +31,8 @@ public class Player {
     private boolean attackHit = false; // Флаг, чтобы атака срабатывала только один раз
 
     private boolean canJump = false;
-    private int health = 3;
-    private int maxHealth = 3;
+    private int health = 4;
+    private int maxHealth = 4;
     private int keys = 0;
     private int seals = 0; // Печати/кристаллы
     private boolean isDead = false;
@@ -52,7 +52,7 @@ public class Player {
         body = world.createBody(bodyDef);
 
         PolygonShape shape = new PolygonShape();
-        shape.setAsBox(0.4f, 0.9f); // Размеры игрока (в метрах)
+        shape.setAsBox(0.4f, 0.9f);
         FixtureDef fixtureDef = new FixtureDef();
         fixtureDef.shape = shape;
         fixtureDef.density = 1f;
@@ -76,33 +76,30 @@ public class Player {
         int walkFrameWidth = walkTexture.getWidth() / 6;  // 6 кадров ходьбы (256px каждый)
         int walkFrameHeight = walkTexture.getHeight();
 
-        // Обрезаем кадры для правильного центрирования персонажа
-        int cropLeft = 128;   // Обрезаем слева на 128px
-        int cropRight = 128;  // Обрезаем справа на 128px
-        int actualWidth = walkFrameWidth - cropLeft - cropRight;  // 256px - 128px - 128px = 0px (это неправильно)
-
-        // Исправляем логику обрезки - оставляем центральную часть
-        actualWidth = walkFrameWidth - cropLeft; // 256px - 128px = 128px (обрезаем только слева)
+        // Обрезаем левую часть и увеличиваем правую часть для правильного центрирования
+        int cropLeft = walkFrameWidth / 2;  // Обрезаем половину ширины слева
+        int extraRight = walkFrameWidth / 3;  // Добавляем треть ширины справа (уменьшено с половины)
 
         TextureRegion[] walkFrames = new TextureRegion[6];
         for (int i = 0; i < 6; i++) {
+            // Создаем регион с обрезкой слева и расширением справа
             walkFrames[i] = new TextureRegion(walkTexture,
-                i * walkFrameWidth + cropLeft, 0,
-                actualWidth, walkFrameHeight);
+                i * walkFrameWidth + cropLeft, 0,  // Начинаем с середины кадра (обрезаем левую часть)
+                walkFrameWidth - cropLeft + extraRight, walkFrameHeight);  // Расширяем правую часть
         }
 
         // Анимация атаки - 6 кадров в горизонтальном ряду
         int attackFrameWidth = attackTexture.getWidth() / 6;  // 6 кадров атаки (256px каждый)
         int attackFrameHeight = attackTexture.getHeight();
 
-        // Применяем ту же логику обрезки для атаки
-        int attackActualWidth = attackFrameWidth - cropLeft; // 256px - 128px = 128px
-
+        // Применяем ту же логику обрезки и расширения для атаки
+        // Используем то же значение extraRight (walkFrameWidth/3) для согласованности
         TextureRegion[] attackFrames = new TextureRegion[6];
         for (int i = 0; i < 6; i++) {
+            // Создаем регион с обрезкой слева и уменьшенным расширением справа
             attackFrames[i] = new TextureRegion(attackTexture,
-                i * attackFrameWidth + cropLeft, 0,
-                attackActualWidth, attackFrameHeight);
+                i * attackFrameWidth + cropLeft, 0,  // Начинаем с середины кадра (обрезаем левую часть)
+                attackFrameWidth - cropLeft + (attackFrameWidth / 3), attackFrameHeight);  // Расширяем правую часть на треть ширины
         }
 
         // Настройки времени анимации
@@ -120,11 +117,12 @@ public class Player {
         currentAnimation = walkAnimation;
 
         System.out.println("✅ Анимации созданы:");
-        System.out.println("   Ходьба: " + walkFrames.length + " кадров (" + actualWidth + "x" + walkFrameHeight + ")");
-        System.out.println("   Атака: " + attackFrames.length + " кадров (" + actualWidth + "x" + attackFrameHeight + ")");
+        System.out.println("   Ходьба: " + walkFrames.length + " кадров (" + walkFrameWidth + "x" + walkFrameHeight + ")");
+        System.out.println("   Атака: " + attackFrames.length + " кадров (" + attackFrameWidth + "x" + attackFrameHeight + ")");
         System.out.println("   Размер текстур: walk=" + walkTexture.getWidth() + "x" + walkTexture.getHeight() +
                           ", attack=" + attackTexture.getWidth() + "x" + attackTexture.getHeight());
-        System.out.println("   Обрезка: слева=" + cropLeft + "px, справа=" + cropRight + "px, итоговая ширина=" + actualWidth + "px");
+        System.out.println("   Обрезка: слева=" + cropLeft + "px, расширение справа=" + extraRight +
+                          "px (уменьшено), итоговая ширина=" + (walkFrameWidth - cropLeft + extraRight) + "px");
     }
 
     public void update(float delta) {
@@ -197,17 +195,31 @@ public class Player {
             currentDirection = newDirection;
         }
 
-        // Применяем движение во всех направлениях
+        // Применяем движение с простой проверкой границ
         float speed = 3f;
-        body.setLinearVelocity(moveX * speed, moveY * speed);
+        Vector2 currentPos = body.getPosition();
+        
+        // Проверяем границы карты перед применением движения
+        float newX = currentPos.x + moveX * speed * delta;
+        float newY = currentPos.y + moveY * speed * delta;
+        
+        // Ограничиваем движение границами карты (20x15 тайлов)
+        if (newX < 0.5f) newX = 0.5f;
+        if (newX > 19.5f) newX = 19.5f;
+        if (newY < 0.5f) newY = 0.5f;
+        if (newY > 14.5f) newY = 14.5f;
+        
+        // Применяем движение
+        body.setLinearVelocity((newX - currentPos.x) / delta, (newY - currentPos.y) / delta);
 
         // Обновляем текущий кадр анимации
         updateAnimation();
 
-        // Прыжок (дополнительно на пробел для совместимости)
-        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && canJump) {
+        // Прыжок (на клавишу J)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.J) && canJump) {
             body.applyLinearImpulse(new Vector2(0, 6f), body.getWorldCenter(), true);
             canJump = false;
+            System.out.println("🦘 Прыжок!");
         }
     }
 
@@ -268,11 +280,16 @@ public class Player {
             batch.setColor(1f, 1f, 1f, 1f); // Обычный цвет
         }
 
-        // Рисуем текущий кадр анимации с правильным центрированием
+        // Рисуем текущий кадр анимации с учетом модифицированных TextureRegion
+        // Поскольку мы уже обрезали левую часть и расширили правую часть в TextureRegion,
+        // нам нужно только небольшое смещение для точной настройки
+        float offsetX = 0.5f;  // Небольшое дополнительное смещение для точной настройки
+        float widthMultiplier = 1.2f;  // Небольшое увеличение ширины для точной настройки
+
         batch.draw(currentFrame,
-                   position.x - width/2,    // Центрируем по X
+                   position.x - width/2 - offsetX,    // Смещаем немного влево для точной настройки
                    position.y - height/2,   // Центрируем по Y
-                   width, height);
+                   width * widthMultiplier, height);  // Немного увеличиваем ширину для точной настройки
 
         // Восстанавливаем цвет
         batch.setColor(1f, 1f, 1f, 1f);
